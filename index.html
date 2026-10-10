@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Optimizer Playground</title>
+  <meta name="description" content="最急降下法・Momentum・Adam・ニュートン法などの軌跡を、等高線の上で並べて動かせるブラウザ完結ツール。自作の関数も試せます">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Optimizer Playground</h1>
+    <p class="lead">同じ開始点から、いくつもの最適化手法を同時に走らせて比べます。等高線をクリックすると開始点が変わります。自作の関数も追加できます。</p>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="plot" aria-label="目的関数の等高線と各手法の軌跡"></canvas>
+        <div class="coord" id="coord"></div>
+      </div>
+      <div class="controls">
+        <button id="playBtn" class="primary" type="button">▶ 再生</button>
+        <button id="stepBtn" type="button">1ステップ</button>
+        <button id="resetBtn" type="button">リセット</button>
+        <label class="speed">速さ
+          <input id="speed" type="range" min="1" max="50" value="4">
+          <span id="speedVal">4</span>
+        </label>
+        <button id="pngBtn" type="button" class="ghost">PNG保存</button>
+      </div>
+      <p class="func-note" id="funcNote"></p>
+    </section>
+
+    <aside class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">問題</div>
+          <span class="start">開始点 <span id="startVal"></span></span>
+        </div>
+        <div class="chips" id="problemList" role="listbox" aria-label="問題の一覧"></div>
+        <div class="formula" id="formula"></div>
+        <div class="row">
+          <button type="button" id="addBtn">＋ 自作の関数</button>
+          <button type="button" id="dupBtn" class="ghost">複製して編集</button>
+          <button type="button" id="editBtn" class="ghost" hidden>編集</button>
+          <button type="button" id="shareBtn" class="ghost" hidden>共有URL</button>
+          <button type="button" id="delBtn" class="ghost danger" hidden>削除</button>
+        </div>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+
+      <form class="card editor" id="editor" hidden novalidate>
+        <div class="card-title" id="editorTitle">自作の関数</div>
+        <label class="field">名前
+          <input type="text" id="edName" maxlength="40" placeholder="例：Booth関数">
+        </label>
+        <label class="field">f(x, y) =
+          <input type="text" id="edExpr" class="mono" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：(x + 2y - 7)^2 + (2x + y - 5)^2">
+        </label>
+        <div class="parsed" id="edParsed" aria-live="polite"></div>
+        <details class="help">
+          <summary>書き方</summary>
+          <p>変数は <code>x</code> と <code>y</code>。演算は <code>+ - * / ^</code>（<code>**</code> も可）。<code>2x</code> や <code>3(x+1)</code> のような掛け算の省略もできます。</p>
+          <p>関数：<code>sin cos tan asin acos atan sinh cosh tanh exp log(=ln) log10 sqrt abs sign</code>　定数：<code>pi e</code></p>
+          <p>勾配は式から記号微分で正確に求めます（数値微分ではありません）。</p>
+        </details>
+        <div class="grid4">
+          <label class="field">x の最小<input type="number" step="any" id="edX0"></label>
+          <label class="field">x の最大<input type="number" step="any" id="edX1"></label>
+          <label class="field">y の最小<input type="number" step="any" id="edY0"></label>
+          <label class="field">y の最大<input type="number" step="any" id="edY1"></label>
+          <label class="field">開始点 x<input type="number" step="any" id="edSX"></label>
+          <label class="field">開始点 y<input type="number" step="any" id="edSY"></label>
+          <label class="field span2">最小値 f*（わかれば）<input type="number" step="any" id="edFmin" placeholder="空欄なら範囲内で自動推定"></label>
+        </div>
+        <label class="field">最小点（わかれば・複数は ; で区切る）
+          <input type="text" id="edMinima" class="mono" placeholder="例：1, 3 ; -2, 0.5">
+        </label>
+        <label class="field">メモ
+          <input type="text" id="edNote" maxlength="160" placeholder="この問題で見たいこと">
+        </label>
+        <div class="row">
+          <button type="submit" class="primary" id="edSave">保存して表示</button>
+          <button type="button" id="edCancel">やめる</button>
+        </div>
+        <p class="small">自作の関数はこのブラウザに保存されます。</p>
+      </form>
+
+      <div class="card">
+        <div class="card-title">手法</div>
+        <div class="table-scroll"><table class="methods" id="methodTable">
+          <thead>
+            <tr><th></th><th>手法</th><th>学習率 η</th><th>反復</th><th>f − f*</th><th>状態</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">f − f* の推移（対数）</div>
+        <canvas id="loss" aria-label="反復ごとの f − f* の推移"></canvas>
+      </div>
+    </aside>
+  </main>
+
+  <section class="batch">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">全問題でまとめて比較</div>
+        <button type="button" id="batchBtn">比較する</button>
+      </div>
+      <p class="small">すべての問題で、それぞれの開始点と学習率のまま全手法を最大 5000 回まで走らせ、収束までの反復回数を並べます。行を押すとその問題に切り替わります。</p>
+      <div class="table-scroll" id="batchOut"></div>
+    </div>
+  </section>
+
+  <section class="explain">
+    <details>
+      <summary>各手法の更新式</summary>
+      <dl id="rules"></dl>
+      <p class="small">ヘッセ行列は勾配の中心差分で求めています。発散（値が非常に大きくなる・非数になる）した手法はその時点で止まります。</p>
+    </details>
+  </section>
+
+  <footer class="foot">
+    <span>計算はすべてブラウザ内で行います。</span>
+    <span>MIT License</span>
+  </footer>
+
+  <script src="expr.js"></script>
+  <script src="optim.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
